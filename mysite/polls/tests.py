@@ -26,6 +26,15 @@ class QuestionModelTests(TestCase):
         recent_question = Question(pub_date=time)
         self.assertIs(recent_question.was_published_recently(), True)
 
+    def test_was_published_recently_with_choices(self):
+        question_with_choices = create_question(question_text="With choices.", days=0)
+        question_with_choices.choice_set.create(choice_text='A choice.', votes=0)
+        self.assertIs(question_with_choices.was_published_recently(), True)
+
+    def test_was_published_recently_without_choices(self):
+        question_without_choices = create_question(question_text="Without choices.", days=0)
+        self.assertIs(question_without_choices.was_published_recently(), False)
+
 
 class QuestionIndexViewTests(TestCase):
     def test_no_questions(self):
@@ -66,6 +75,33 @@ class QuestionIndexViewTests(TestCase):
             ['<Question: Past question 2.>', '<Question: Past question 1.>']
         )
 
+    def test_question_without_choices(self):
+        create_question(question_text="Without choices.", days=0)
+        response = self.client.get(reverse('polls:index'))
+        self.assertContains(response, "No polls are available.")
+        self.assertQuerysetEqual(response.context['latest_question_list'], [])
+
+    def test_questions_with_and_without_choices(self):
+        question_with_choices = create_question(question_text="With choices.", days=0)
+        question_with_choices.choice_set.create(choice_text='A choice.', votes=0)
+        create_question(question_text="Without choices.", days=0)
+        response = self.client.get(reverse('polls:index'))
+        self.assertQuerysetEqual(
+            response.context['latest_question_list'],
+            ['<Question: With choices.>']
+        )
+
+    def test_two_questions_with_choices(self):
+        question_with_choices = create_question(question_text="With choices 1.", days=0)
+        question_with_choices.choice_set.create(choice_text='A choice.', votes=0)
+        question_with_choices = create_question(question_text="With choices 2.", days=0)
+        question_with_choices.choice_set.create(choice_text='A choice.', votes=0)
+        response = self.client.get(reverse('polls:index'))
+        self.assertQuerysetEqual(
+            response.context['latest_question_list'],
+            ['<Question: With choices 2.>', '<Question: With choices 1.>']
+        )
+
 
 class QuestionDetailViewTests(TestCase):
     def test_future_question(self):
@@ -80,6 +116,19 @@ class QuestionDetailViewTests(TestCase):
         response = self.client.get(url)
         self.assertContains(response, past_question.question_text)
 
+    def test_question_with_choices(self):
+        question_with_choices = create_question(question_text="With choices.", days=0)
+        question_with_choices.choice_set.create(choice_text='A choice.', votes=0)
+        url = reverse('polls:detail', args=(question_with_choices.id,))
+        response = self.client.get(url)
+        self.assertContains(response, question_with_choices.question_text)
+
+    def test_question_without_choices(self):
+        question_without_choices = create_question(question_text="Without choices.", days=0)
+        url = reverse('polls:detail', args=(question_without_choices.id,))
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
 
 class QuestionResultsViewTests(TestCase):
     def test_future_question(self):
@@ -93,3 +142,16 @@ class QuestionResultsViewTests(TestCase):
         url = reverse('polls:results', args=(past_question.id,))
         response = self.client.get(url)
         self.assertContains(response, past_question.question_text)
+
+    def test_question_with_choices(self):
+        question_with_choices = create_question(question_text="With choices.", days=0)
+        question_with_choices.choice_set.create(choice_text='A choice.', votes=0)
+        url = reverse('polls:results', args=(question_with_choices.id,))
+        response = self.client.get(url)
+        self.assertContains(response, question_with_choices.question_text)
+
+    def test_question_without_choices(self):
+        question_without_choices = create_question(question_text="Without choices.", days=0)
+        url = reverse('polls:results', args=(question_without_choices.id,))
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
